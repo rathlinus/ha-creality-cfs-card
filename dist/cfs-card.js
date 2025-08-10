@@ -360,10 +360,11 @@
     setConfig(config) {
       this._config = {
         title: config.title ?? "Creality CFS",
-        images_path:
-          (
-            config.images_path ?? "/hacsfiles/ha-creality-cfs-card/assets"
-          ).replace(/\/+$/, "") + "/",
+images_path:
+  (
+    config.images_path ??
+    "https://raw.githubusercontent.com/rathlinus/ha-creality-cfs-card/refs/heads/main/assets"
+  ).replace(/\/+$/, "") + "/",
         filter_prefix: config.filter_prefix ?? "",
         default_printer: config.default_printer,
         default_box: config.default_box,
