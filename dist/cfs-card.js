@@ -630,7 +630,7 @@
       type: "cfs-card",
       name: "Creality CFS Card",
       description:
-        "Select Printer → CFS; calibrated hue-rotate+tint with nicer slot layout.",
+        "Creality CFS Card",
     });
   }
 })();
