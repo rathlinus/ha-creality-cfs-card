@@ -1,6 +1,7 @@
 {
   "name": "Creality CFS Card",
   "render_readme": false,
-  "filename": "ha-creality-cfs-card.js"
+  "filename": "cfs-card.js"
 }
+
 
