@@ -2,6 +2,13 @@
   "name": "Creality CFS Card",
   "render_readme": false,
   "filename": "cfs-card.js"
+  "resources": [
+    "assets/0.png",
+    "assets/1.png",
+    "assets/2.png",
+    "assets/3.png",
+    "assets/cfs.png"
+  ]
 }
 
 
