@@ -214,7 +214,7 @@
           gap: 8px;
           grid-template-columns: repeat(
             auto-fit,
-            minmax(150px, 1fr)
+            minmax(180px, 1fr)
           ); /* denser */
         }
 
@@ -360,11 +360,11 @@
     setConfig(config) {
       this._config = {
         title: config.title ?? "Creality CFS",
-images_path:
-  (
-    config.images_path ??
-    "https://raw.githubusercontent.com/rathlinus/ha-creality-cfs-card/refs/heads/main/assets"
-  ).replace(/\/+$/, "") + "/",
+        images_path:
+          (
+            config.images_path ??
+            "https://raw.githubusercontent.com/rathlinus/ha-creality-cfs-card/refs/heads/main/assets"
+          ).replace(/\/+$/, "") + "/",
         filter_prefix: config.filter_prefix ?? "",
         default_printer: config.default_printer,
         default_box: config.default_box,
@@ -558,9 +558,20 @@ images_path:
       this.requestUpdate();
     }
 
+    // --- replace the whole _detectPrinters(hass) with this ---
     _detectPrinters(hass) {
+      // Accept a few common CFS naming schemes
+      const PATTERNS = [
+        // sensor.<slug>_cfs_<box>_(temperature|humidity)
+        /^sensor\.(.+?)_cfs_(\d+)_(temperature|humidity)$/i,
+        // sensor.<slug>_cfs<box>_(temperature|humidity)
+        /^sensor\.(.+?)_cfs(\d+)_(temperature|humidity)$/i,
+        // sensor.<slug>_cfs_box_<box>_(temperature|humidity)
+        /^sensor\.(.+?)_cfs_box_(\d+)_(temperature|humidity)$/i,
+      ];
+
       const printers = new Map();
-      const re = /^sensor\.(.+)_cfs_(\d+)_(temperature|humidity)$/;
+
       for (const [eid] of Object.entries(hass.states)) {
         if (!eid.startsWith("sensor.")) continue;
         if (
@@ -568,13 +579,19 @@ images_path:
           !eid.includes(this._config.filter_prefix)
         )
           continue;
-        const m = eid.match(re);
-        if (!m) continue;
-        const key = m[1];
-        const box = Number(m[2]);
-        if (!printers.has(key)) printers.set(key, new Set());
-        printers.get(key).add(box);
+
+        for (const re of PATTERNS) {
+          const m = eid.match(re);
+          if (!m) continue;
+          const key = m[1]; // printer slug
+          const box = Number(m[2]); // CFS box id
+          if (!Number.isFinite(box)) continue;
+          if (!printers.has(key)) printers.set(key, new Set());
+          printers.get(key).add(box);
+          break; // matched one pattern; move on
+        }
       }
+
       const arr = [];
       for (const [key, set] of printers.entries()) {
         arr.push({
@@ -588,17 +605,34 @@ images_path:
       );
       return arr;
     }
+
     _prettyKey(k) {
       return k.replace(/[_\.]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     }
 
+    // --- inside _collectData, replace valueOf(...) with this flexible matcher ---
     _collectData(hass, key, boxId) {
-      const valueOf = (pattern) => {
-        const re = new RegExp(
-          `^sensor\\.${this._esc(key)}_cfs_${boxId}_${pattern}$`
-        );
+      const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+      const valueOf = (suffixPattern) => {
+        // Try three naming schemes for each requested field:
+        const regs = [
+          new RegExp(
+            `^sensor\\.${esc(key)}_cfs_${boxId}_${suffixPattern}$`,
+            "i"
+          ),
+          new RegExp(
+            `^sensor\\.${esc(key)}_cfs${boxId}_${suffixPattern}$`,
+            "i"
+          ),
+          new RegExp(
+            `^sensor\\.${esc(key)}_cfs_box_${boxId}_${suffixPattern}$`,
+            "i"
+          ),
+        ];
         for (const [eid, st] of Object.entries(hass.states)) {
-          if (!re.test(eid)) continue;
+          if (!eid.startsWith("sensor.")) continue;
+          if (!regs.some((r) => r.test(eid))) continue;
           const v = st.state;
           if (v === "unknown" || v === "unavailable") return undefined;
           const n = Number(v);
@@ -606,12 +640,15 @@ images_path:
         }
         return undefined;
       };
+
       const slotVal = (i, f) => valueOf(`slot_${i}_${f}`);
+
       const data = {
-        temp: valueOf("temperature"),
+        temp: valueOf("(temperature|temp)"), // allow ..._temp on some firmwares
         humidity: valueOf("humidity"),
         slots: {},
       };
+
       for (let i = 0; i < 4; i++) {
         const slot = {};
         for (const f of SLOT_FIELDS) slot[f] = slotVal(i, f);
@@ -620,6 +657,7 @@ images_path:
       }
       return data;
     }
+
     _esc(s) {
       return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
@@ -630,8 +668,7 @@ images_path:
     window.customCards.push({
       type: "cfs-card",
       name: "Creality CFS Card",
-      description:
-        "Creality CFS Card",
+      description: "Creality CFS Card",
     });
   }
 })();
