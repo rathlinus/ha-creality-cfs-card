@@ -359,7 +359,7 @@
 
     setConfig(config) {
       this._config = {
-        title: config.title ?? "Creality CFS",
+        title: config.title ?? "Creality CFS Test",
         images_path:
           (
             config.images_path ??
@@ -558,19 +558,12 @@
       this.requestUpdate();
     }
 
-    // --- replace the whole _detectPrinters(hass) with this ---
     _detectPrinters(hass) {
-      // Accept a few common CFS naming schemes
-      const PATTERNS = [
-        // sensor.<slug>_cfs_<box>_(temperature|humidity)
-        /^sensor\.(.+?)_cfs_(\d+)_(temperature|humidity)$/i,
-        // sensor.<slug>_cfs<box>_(temperature|humidity)
-        /^sensor\.(.+?)_cfs(\d+)_(temperature|humidity)$/i,
-        // sensor.<slug>_cfs_box_<box>_(temperature|humidity)
-        /^sensor\.(.+?)_cfs_box_(\d+)_(temperature|humidity)$/i,
-      ];
-
       const printers = new Map();
+      // 1) key + optional _<box> + metric
+      const re = /^sensor\.(.+?)_cfs_(?:(\d+)_)?(temperature|humidity)$/;
+      // 2) compact box form: _cfs<box>_
+      const reCompact = /^sensor\.(.+?)_cfs(\d+)_(temperature|humidity)$/;
 
       for (const [eid] of Object.entries(hass.states)) {
         if (!eid.startsWith("sensor.")) continue;
@@ -580,16 +573,22 @@
         )
           continue;
 
-        for (const re of PATTERNS) {
-          const m = eid.match(re);
-          if (!m) continue;
-          const key = m[1]; // printer slug
-          const box = Number(m[2]); // CFS box id
-          if (!Number.isFinite(box)) continue;
-          if (!printers.has(key)) printers.set(key, new Set());
-          printers.get(key).add(box);
-          break; // matched one pattern; move on
+        let m = eid.match(re);
+        let key, box;
+        if (m) {
+          key = m[1];
+          box = m[2] ? Number(m[2]) : 0;
+        } else {
+          const mc = eid.match(reCompact);
+          if (mc) {
+            key = mc[1];
+            box = Number(mc[2]);
+          } else {
+            continue;
+          }
         }
+        if (!printers.has(key)) printers.set(key, new Set());
+        printers.get(key).add(box);
       }
 
       const arr = [];
@@ -610,45 +609,37 @@
       return k.replace(/[_\.]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     }
 
-    // --- inside _collectData, replace valueOf(...) with this flexible matcher ---
     _collectData(hass, key, boxId) {
       const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-      const valueOf = (suffixPattern) => {
-        // Try three naming schemes for each requested field:
-        const regs = [
-          new RegExp(
-            `^sensor\\.${esc(key)}_cfs_${boxId}_${suffixPattern}$`,
-            "i"
-          ),
-          new RegExp(
-            `^sensor\\.${esc(key)}_cfs${boxId}_${suffixPattern}$`,
-            "i"
-          ),
-          new RegExp(
-            `^sensor\\.${esc(key)}_cfs_box_${boxId}_${suffixPattern}$`,
-            "i"
-          ),
+      const valueOf = (pattern) => {
+        const tries = [
+          new RegExp(`^sensor\\.${esc(key)}_cfs_${boxId}_${pattern}$`), // standard
+          new RegExp(`^sensor\\.${esc(key)}_cfs${boxId}_${pattern}$`), // compact box
+          new RegExp(`^sensor\\.${esc(key)}_cfs_${pattern}$`), // no box id
         ];
         for (const [eid, st] of Object.entries(hass.states)) {
           if (!eid.startsWith("sensor.")) continue;
-          if (!regs.some((r) => r.test(eid))) continue;
-          const v = st.state;
-          if (v === "unknown" || v === "unavailable") return undefined;
-          const n = Number(v);
-          return Number.isFinite(n) ? n : v;
+          if (tries.some((re) => re.test(eid))) {
+            const v = st.state;
+            if (v === "unknown" || v === "unavailable") return undefined;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : v;
+          }
         }
         return undefined;
       };
 
-      const slotVal = (i, f) => valueOf(`slot_${i}_${f}`);
+      const slotVal = (i, f) => {
+        // Try slot_0_percent, then slot0_percent
+        return valueOf(`slot_${i}_${f}`) ?? valueOf(`slot${i}_${f}`);
+      };
 
       const data = {
-        temp: valueOf("(temperature|temp)"), // allow ..._temp on some firmwares
+        temp: valueOf("temperature"),
         humidity: valueOf("humidity"),
         slots: {},
       };
-
       for (let i = 0; i < 4; i++) {
         const slot = {};
         for (const f of SLOT_FIELDS) slot[f] = slotVal(i, f);
