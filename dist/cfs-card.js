@@ -1,4 +1,3 @@
-/* Creality CFS Card — v2 calibrated tint + nicer columns */
 (() => {
   const Lit =
     window.LitElement ||
@@ -214,7 +213,7 @@
           gap: 8px;
           grid-template-columns: repeat(
             auto-fit,
-            minmax(180px, 1fr)
+            minmax(120px, 1fr)
           ); /* denser */
         }
 
@@ -320,10 +319,9 @@
         /* compact key-values: two pairs per row */
         .kvs {
           display: grid;
-          grid-template-columns: auto 1fr auto 1fr; /* label value label value */
-          row-gap: 6px;
-          column-gap: 8px;
-          align-items: center;
+          grid-template-columns: repeat(2, 1fr); /* two pairs per row */
+          row-gap: 10px;
+          column-gap: 16px;
           font-size: 11px;
           font-variant-numeric: tabular-nums;
           padding: 6px 8px;
@@ -531,10 +529,6 @@
             <div class="barfill" style="width:${pct ?? 0}%"></div>
           </div>
           <div class="kvs">
-            <label>Percent</label>
-            <div>${pct ?? "—"}%</div>
-            <label>State</label>
-            <div>${s.state ?? "—"}</div>
             <label>Min Temp</label>
             <div>${s.min_temp ?? "—"}°C</div>
             <label>Max Temp</label>
